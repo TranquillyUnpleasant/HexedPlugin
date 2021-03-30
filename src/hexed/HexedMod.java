@@ -25,8 +25,6 @@ import static mindustry.Vars.*;
 public class HexedMod extends Plugin{
     //in seconds
     public static final float spawnDelay = 60 * 4;
-    //health requirement needed to capture a hex; no longer used
-    public static final float healthRequirement = 3500;
     //item requirement to captured a hex
     public static final int itemRequirement = 210;
 
@@ -43,10 +41,12 @@ public class HexedMod extends Plugin{
     private final static int timerBoard = 0, timerUpdate = 1, timerWinCheck = 2;
 
     private final Rules rules = new Rules();
-    private Interval interval = new Interval(5);
+    private final Interval interval = new Interval(5);
 
     private HexData data;
     private boolean restarting = false, registered = false;
+
+    private boolean started = false;
 
     private Schematic start;
     private double counter = 0f;
@@ -64,6 +64,14 @@ public class HexedMod extends Plugin{
         rules.enemyCoreBuildRadius = (Hex.diameter - 1) * tilesize / 2f;
         rules.unitDamageMultiplier = 1.1f;
         rules.canGameOver = false;
+        rules.bannedBlocks.addAll(
+                Blocks.foreshadow,
+                Blocks.microProcessor,
+                Blocks.logicProcessor,
+                Blocks.hyperProcessor,
+                Blocks.exponentialReconstructor,
+                Blocks.tetrativeReconstructor
+        );
 
         start = Schematics.readBase64("bXNjaAB4nE2SgY7CIAyGC2yDsXkXH2Tvcq+AkzMmc1tQz/j210JpXDL8hu3/lxYY4FtBs4ZbBLvG1ync4wGO87bvMU2vsCzTEtIlwvCxBW7e1r/43hKYkGY4nFN4XqbfMD+29IbhvmHOtIc1LjCmuIcrfm3X9QH2PofHIyYY5y3FaX3OS3ze4fiRwX7dLa5nDHTPddkCkT3l1DcA/OALihZNq4H6NHnV+HZCVshJXA9VYZC9kfVU+VQGKSsbjVT1lOgp1qO4rGIo9yvnquxH1ORIohap6HVIDbtpaNlDi4cWD80eFJdrNhbJc8W61Jzdqi/3wrRIRii7GYdelvWMZDQs1kNbqtYe9/KuGvDX5zD6d5SML66+5dwRqXgQee5GK3Edxw1ITfb3SJ71OomzUAdjuWsWqZyJavd8Issdb5BqVbaoGCVzJqrddaUGTWSFHPs67m6H5HlaTqbqpFc91Kfn+2eQSp9pr96/Xtx6cevZjeKKDuUOklvvXy9uPGdNZFjZi7IXZS/n8Hyf/wFbjj/q");
 
@@ -72,7 +80,7 @@ public class HexedMod extends Plugin{
                 data.updateStats();
 
                 for(Player player : Groups.player){
-                    if(player.team() != Team.derelict && player.team().cores().isEmpty()){
+                    if(player.team() != Team.derelict && player.team().cores().isEmpty() && started){
                         player.clearUnit();
                         killTiles(player.team());
                         Call.sendMessage("[yellow](!)[] [accent]" + player.name + "[lightgray] has been eliminated![yellow] (!)");
@@ -83,7 +91,8 @@ public class HexedMod extends Plugin{
                     if(player.team() == Team.derelict){
                         player.clearUnit();
                     }else if(data.getControlled(player).size == data.hexes().size){
-                        endGame();
+                        Call.infoMessage("The event is over!\n\n[stat]" + player.name + " is victorious!\n\nThank you everyone for attending the event!\n\nSee you for the (potential) next one!" );
+                        Timer.schedule(this::endGame, 120);
                         break;
                     }
                 }
@@ -139,22 +148,14 @@ public class HexedMod extends Plugin{
         });
 
         Events.on(PlayerJoin.class, event -> {
-            if(!active() || event.player.team() == Team.derelict) return;
-
-            Seq<Hex> copy = data.hexes().copy();
-            copy.shuffle();
-            Hex hex = copy.find(h -> h.controller == null && h.spawnTime.get());
-
-            if(hex != null){
-                loadout(event.player, hex.x, hex.y);
-                Core.app.post(() -> data.data(event.player).chosen = false);
-                hex.findController();
-            }else{
-                Call.infoMessage(event.player.con, "There are currently no empty hex spaces available.\nAssigning into spectator mode.");
+            if (!started) {
+                Call.infoMessage(event.player.con, "Waiting for the players to join.\nThe event will start soon.");
+                return;
+            } else {
+                Call.infoMessage(event.player.con, "The event has already started.\nAssigning spectator mode.");
                 event.player.unit().kill();
                 event.player.team(Team.derelict);
             }
-
             data.data(event.player).lastMessage.reset();
         });
 
@@ -227,6 +228,28 @@ public class HexedMod extends Plugin{
             state.rules = rules.copy();
             logic.play();
             netServer.openServer();
+        });
+
+        handler.register("begin", "Begin the event", args -> {
+            Call.infoMessage("[accent]The [orange]event[] has begun!\n\nLast one to survive wins!\n\n[white]Happy hexing\nand may the odds be ever in your favor!");
+            Groups.player.forEach(player -> {
+                Seq<Hex> copy = data.hexes().copy();
+                copy.shuffle();
+                Hex hex = copy.find(h -> h.controller == null && h.spawnTime.get());
+
+                if(hex != null){
+                    loadout(player, hex.x, hex.y);
+                    Core.app.post(() -> data.data(player).chosen = false);
+                    hex.findController();
+                }else{
+                    Call.infoMessage(player.con, "There are currently no empty hex spaces available.\nAssigning into spectator mode.");
+                    player.unit().kill();
+                    player.team(Team.derelict);
+                }
+
+                data.data(player).lastMessage.reset();
+            });
+            started = true;
         });
 
         handler.register("countdown", "Get the hexed restart countdown.", args -> {
