@@ -1,10 +1,12 @@
 package hexed;
 
 import arc.*;
+import arc.graphics.Color;
 import arc.math.*;
 import arc.struct.*;
 import arc.util.*;
 import hexed.HexData.*;
+import mindustry.Vars;
 import mindustry.content.*;
 import mindustry.core.GameState.*;
 import mindustry.core.NetServer.*;
@@ -14,6 +16,7 @@ import mindustry.game.Schematic.*;
 import mindustry.game.Teams.*;
 import mindustry.gen.*;
 import mindustry.mod.*;
+import mindustry.net.Administration;
 import mindustry.net.Packets.*;
 import mindustry.type.*;
 import mindustry.world.*;
@@ -61,9 +64,11 @@ public class HexedMod extends Plugin{
         rules.buildSpeedMultiplier = 1f / 2f;
         rules.blockHealthMultiplier = 1.2f;
         rules.unitBuildSpeedMultiplier = 1f;
-        rules.enemyCoreBuildRadius = (Hex.diameter - 1) * tilesize / 2f;
+        rules.enemyCoreBuildRadius = 0; //(Hex.diameter - 1) * tilesize / 2f;
         rules.unitDamageMultiplier = 1.1f;
         rules.canGameOver = false;
+        rules.ambientLight = new Color(80, 0, 0, 30);
+        rules.schematicsAllowed = false;
         rules.bannedBlocks.addAll(
                 Blocks.foreshadow,
                 Blocks.microProcessor,
@@ -91,8 +96,7 @@ public class HexedMod extends Plugin{
                     if(player.team() == Team.derelict){
                         player.clearUnit();
                     }else if(data.getControlled(player).size == data.hexes().size){
-                        Call.infoMessage("The event is over!\n\n[stat]" + player.name + " is victorious!\n\nThank you everyone for attending the event!\n\nSee you for the (potential) next one!" );
-                        Timer.schedule(this::endGame, 120);
+                        endGame();
                         break;
                     }
                 }
@@ -108,13 +112,6 @@ public class HexedMod extends Plugin{
 
                 if(interval.get(timerUpdate, updateTime)){
                     data.updateControl();
-                }
-
-                if(interval.get(timerWinCheck, 60 * 2)){
-                    Seq<Player> players = data.getLeaderboard();
-                    if(!players.isEmpty() && data.getControlled(players.first()).size >= winCondition && players.size > 1 && data.getControlled(players.get(1)).size <= 1){
-                        endGame();
-                    }
                 }
 
                 counter += Time.delta;
@@ -164,6 +161,12 @@ public class HexedMod extends Plugin{
         Events.on(HexCaptureEvent.class, event -> updateText(event.player));
 
         Events.on(HexMoveEvent.class, event -> updateText(event.player));
+
+        Events.on(EventType.ServerLoadEvent.class, event -> {
+            netServer.admins.addActionFilter(action -> {
+                return action.type != Administration.ActionType.command;
+            });
+        });
 
         TeamAssigner prev = netServer.assigner;
         netServer.assigner = (player, players) -> {
@@ -324,9 +327,9 @@ public class HexedMod extends Plugin{
             boolean dominated = data.getControlled(players.first()).size == data.hexes().size;
 
             for(Player player : Groups.player){
-                Call.infoMessage(player.con, "[accent]--ROUND OVER--\n\n[lightgray]"
+                Call.infoMessage(player.con, "[accent]--EVENT OVER--\n\n[lightgray]"
                 + (player == players.first() ? "[accent]You[] were" : "[yellow]" + players.first().name + "[lightgray] was") +
-                " victorious, with [accent]" + data.getControlled(players.first()).size + "[lightgray] hexes conquered." + (dominated ? "" : "\n\nFinal scores:\n" + builder));
+                " victorious, with [accent]" + data.getControlled(players.first()).size + "[lightgray] hexes conquered.\n\n[white]Thank you to everyone who attended the event!\nHope to see you in the (potential) next one!");
             }
         }
 
