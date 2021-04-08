@@ -92,6 +92,7 @@ public class HexedMod extends Plugin {
             if (active()) {
                 data.updateStats();
 
+                state.serverPaused = !started;
                 for (Player player : Groups.player) {
                     if (player.team() != Team.derelict && player.team().cores().isEmpty() && started) {
                         player.clearUnit();
