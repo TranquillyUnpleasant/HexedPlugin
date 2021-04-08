@@ -144,14 +144,27 @@ public class HexedMod extends Plugin {
         });
 
         Events.on(PlayerJoin.class, event -> {
-            if (!started) {
-                Call.infoMessage(event.player.con, "Waiting for the players to join.\nThe event will start soon.");
-                return;
-            } else {
-                Call.infoMessage(event.player.con, "The event has already started.\nAssigning spectator mode.");
+            if(started){
+                Call.infoMessage(event.player.con, "The event has already started.\nAssigning into spectator mode.");
                 event.player.unit().kill();
                 event.player.team(Team.derelict);
             }
+            if(!active() || event.player.team() == Team.derelict) return;
+
+            Seq<Hex> copy = data.hexes().copy();
+            copy.shuffle();
+            Hex hex = copy.find(h -> h.controller == null && h.spawnTime.get());
+
+            if(hex != null){
+                loadout(event.player, hex.x, hex.y);
+                Core.app.post(() -> data.data(event.player).chosen = false);
+                hex.findController();
+            }else{
+                Call.infoMessage(event.player.con, "There are currently no empty hex spaces available.\nAssigning into spectator mode.");
+                event.player.unit().kill();
+                event.player.team(Team.derelict);
+            }
+
             data.data(event.player).lastMessage.reset();
         });
 
@@ -171,7 +184,8 @@ public class HexedMod extends Plugin {
 
         Events.on(EventType.ServerLoadEvent.class, event -> {
             netServer.admins.addActionFilter(action -> {
-                return action.type != Administration.ActionType.command;
+                if (!started) Call.infoToast(action.player.con, "[scarlet]The event has not yet begun.", 10f);
+                return started && action.type != Administration.ActionType.command;
             });
         });
 
@@ -239,29 +253,13 @@ public class HexedMod extends Plugin {
             netServer.openServer();
         });
 
-        handler.register("begin", "Begin the event", args -> {
-            if (Groups.player.size() < 10) {
+        handler.register("begin", "[force?]", "Begin the event", args -> {
+            boolean force = args.length < 1 || args[0].equals("force");
+            if (Groups.player.size() < 10 && !force) {
                 Log.info("Wait for more people to join, @ / @", Groups.player.size(), minPlayers);
                 return;
             }
             Call.infoMessage("[accent]--EVENT STARTED--[]\n\n[scarlet]Last one to survive wins![]\n\n[white]Happy hexing...\nand may the odds be ever in your favor!");
-            Groups.player.forEach(player -> {
-                Seq<Hex> copy = data.hexes().copy();
-                copy.shuffle();
-                Hex hex = copy.find(h -> h.controller == null && h.spawnTime.get());
-
-                if (hex != null) {
-                    loadout(player, hex.x, hex.y);
-                    Core.app.post(() -> data.data(player).chosen = false);
-                    hex.findController();
-                } else {
-                    Call.infoMessage(player.con, "There are currently no empty hex spaces available.\nAssigning into spectator mode.");
-                    player.unit().kill();
-                    player.team(Team.derelict);
-                }
-
-                data.data(player).lastMessage.reset();
-            });
             started = true;
         });
 
