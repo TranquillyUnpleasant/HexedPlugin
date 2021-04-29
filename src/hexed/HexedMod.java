@@ -34,7 +34,7 @@ import static arc.util.Log.info;
 import static mindustry.Vars.*;
 
 public class HexedMod extends Plugin {
-    //in seconds
+    //in ticks: 4 seconds
     public static final float spawnDelay = 60 * 4;
     //item requirement to captured a hex
     public static final int itemRequirement = 210;
@@ -42,7 +42,7 @@ public class HexedMod extends Plugin {
     public static final int messageTime = 1;
     //minimum players to wait for
     private static int minPlayers = 10;
-    //in ticks: 3 minutes
+    //in ticks: 2 minutes
     private final static int leaderboardTime = 60 * 60 * 2;
 
     private final static int updateTime = 60 * 2;
@@ -58,6 +58,8 @@ public class HexedMod extends Plugin {
     private boolean registered = false;
 
     private boolean started = false;
+
+    private long startTime = Long.MAX_VALUE;
 
     private Schematic start;
 
@@ -94,7 +96,7 @@ public class HexedMod extends Plugin {
 
                 state.serverPaused = !started;
                 for (Player player : Groups.player) {
-                    if (player.team() != Team.derelict && player.team().cores().isEmpty() && started) {
+                    if (player.team() != Team.derelict && player.team().cores().isEmpty() && started && System.currentTimeMillis()-5000>startTime) {
                         player.clearUnit();
                         killTiles(player.team());
                         Call.sendMessage("[yellow](!)[] [accent]" + player.name + "[lightgray] has been eliminated![yellow] (!)");
@@ -262,6 +264,7 @@ public class HexedMod extends Plugin {
             }
             Call.infoMessage("[accent]--EVENT STARTED--[]\n\n[scarlet]Last one to survive wins![]\n\n[white]Happy hexing...\nand may the odds be ever in your favor!");
             started = true;
+            startTime=System.currentTimeMillis();
         });
 
         handler.register("finish", "Announce the end of the event.", args -> {
